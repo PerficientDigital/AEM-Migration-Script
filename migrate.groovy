@@ -24,7 +24,7 @@ final ENCODING = "UTF-8"
 start = new Date()
 
 if(args.length < 1) {
-    println 'groovy migrate.groovy [configdir] [batch]'
+    println 'groovy migrate.groovy [configdir] [batch (Optional)]'
     System.exit(1)
 }
 
