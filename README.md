@@ -1,7 +1,6 @@
-# Groovy AEM Content Import
+# Groovy AEM Migration Tool
 
 Migration tool for migrating content into AEM by generating a Content Package.
-
 
 ## Quickstart
 
