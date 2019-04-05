@@ -1,6 +1,6 @@
 # Groovy AEM Migration Tool
 
-Migration tool for migrating content into AEM by generating a Content Package.
+Migration tool for migrating content into AEM from legacy Content Management Systems by generating a Content Package. This migration tool supports nearly any legacy CMS which can produce an XML representation of content. 
 
 ## Quickstart
 
