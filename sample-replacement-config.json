@@ -1,0 +1,20 @@
+{
+	"page-mappings.csv": [
+		{
+			"mode": "mapping",
+			"sourceKey": "Legacy Url",
+			"targetKey": "New Url"
+		},
+		{
+			"mode": "mapping",
+			"sourceKey": "Source Path",
+			"targetKey": "New Url"
+		}
+	],
+	"file-mappings.csv": [{
+		"mode": "mapping",
+		"sourceKey": "Source",
+		"targetKey": "Target"
+	}]
+
+}

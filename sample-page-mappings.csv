@@ -1,0 +1,2 @@
+Status,Batch,Template,Legacy Url,Source Path,New Path,New Url
+Migrate,Batch 1,content,/page.aspx,/page.xml,/content/sample,/content/sample.html

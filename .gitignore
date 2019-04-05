@@ -1,0 +1,9 @@
+page-mappings.txt
+file-mappings.txt
+filter.xml
+*.log
+
+# Mac
+.DS_Store
+
+work/

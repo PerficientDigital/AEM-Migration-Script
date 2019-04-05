@@ -1,0 +1,9 @@
+<page>
+    <metadata>
+        <title>Page Title</title>
+        <description>A longer page description</description>
+    </metadata>
+    <content>
+        <![CDATA[<p>Here's some content!</p>]]>
+    </content>
+</page>
