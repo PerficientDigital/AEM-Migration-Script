@@ -21,6 +21,9 @@
 @Grab('com.xlson.groovycsv:groovycsv:1.3')
 import static com.xlson.groovycsv.CsvParser.parseCsv
 
+@Grab('org.apache.tika:tika-core:1.14')
+import org.apache.tika.Tika;
+
 import groovy.io.FileType
 import groovy.xml.MarkupBuilder
 import groovy.json.JsonSlurper
@@ -164,6 +167,49 @@ void processPages(File source, File jcrRoot) {
     println "${count} pages processed and ${migrated} migrated in ${TimeCategory.minus(new Date(), start)}"
 }
 
+void processFiles(File source, File jcrRoot){
+    
+    def contentXml = '''<?xml version="1.0" encoding="UTF-8"?>
+<jcr:root xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dam="http://www.day.com/dam/1.0" xmlns:cq="http://www.day.com/jcr/cq/1.0" xmlns:jcr="http://www.jcp.org/jcr/1.0" xmlns:mix="http://www.jcp.org/jcr/mix/1.0" xmlns:nt="http://www.jcp.org/jcr/nt/1.0"
+    jcr:primaryType="dam:Asset">
+    <jcr:content
+        jcr:primaryType="dam:AssetContent">
+        <metadata
+            jcr:primaryType="nt:unstructured"/>
+        <related jcr:primaryType="nt:unstructured"/>
+    </jcr:content>
+</jcr:root>
+'''
+    def tika = new Tika()
+    def files = new File('work/config/file-mappings.csv')
+    def count = 0
+    def migrated = 0
+    println 'Processing files...'
+    for (fileData in parseCsv(files.getText(ENCODING), separator: SEPARATOR)) {
+        def assetRoot = new File(fileData['Target'], jcrRoot)
+        def sourceFile = new File(fileData['Source'], source)
+        def mimeType = tika.detect(sourceFile)
+        
+        println "Processing Source: ${sourceFile} Target: ${assetRoot}"
+        
+        println 'Creating original.dir XML...'
+        def writer = new StringWriter()
+        def originalDirXml = new MarkupBuilder(writer)
+        originalDirXml.'jcr:root'('xmlns:jcr':'http://www.jcp.org/jcr/1.0','xmlns:nt':'http://www.jcp.org/jcr/nt/1.0','jcr:primaryType':'nt:file'){
+            'jcr:content'('jcr:mimeType': mimeType, 'jcr:primaryType': 'nt:resource')
+        }
+        def originalDir = new File('_jcr_content/renditions/original.dir/.content.xml',assetRoot)
+        originalDir.getParentFile().mkdirs()
+        originalDir << writer.toString()
+        
+        println 'Copying original file...'
+        Files.copy(sourceFile.toPath(), new File('_jcr_content/renditions/original',assetRoot).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
+        
+        println 'Writing .content.xml...'
+        new File('.content.xml',assetRoot) << contentXml
+    }
+}
+
 def configDir = new File(args[0])
 assert configDir.exists()
 println 'Copying configuration to work dir...'
@@ -187,6 +233,7 @@ target.deleteDir();
 target.mkdir();
 
 processPages(source,jcrRoot)
+processFiles(source,jcrRoot)
 
 println 'Updating filter.xml...'
 def vlt = new File('META-INF/vault',target)
@@ -203,6 +250,14 @@ if(batch?.trim()){
                 'filter'('root':pageData['New Path']){
                     'include'('pattern':pageData['New Path'])
                     'include'('pattern':"${pageData['New Path']}/jcr:content.*")
+                }
+            }
+        }
+        for (fileData in parseCsv(new File('work/config/file-mappings.csv').getText(ENCODING), separator: SEPARATOR)) {
+            if(batch.equals(fileData['Batch']) && 'Remove' != fileData[0] && 'Missing' != fileData[0]){
+                'filter'('root':fileData['Target']){
+                    'include'('pattern':fileData['Target'])
+                    'include'('pattern':"${fileData['Target']}/jcr:content.*")
                 }
             }
         }
