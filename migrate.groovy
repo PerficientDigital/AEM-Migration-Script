@@ -58,7 +58,7 @@ if(args.length == 2) {
 Map loadReplacements() {
     def count = 0
 
-    def cf = new File('work/config/replacement-config.json')
+    def cf = new File("work${File.separator}config${File.separator}replacement-config.json")
     assert cf.exists()
     def slurper = new JsonSlurper()
     def config = slurper.parseText(cf.text)
@@ -68,7 +68,7 @@ Map loadReplacements() {
     config.each{file,cfgs->
         println "Processing replacements for ${file}..."
 
-        def sf = new File('work/config/'+file)
+        def sf = new File("work${File.separator}config${File.separator}${file}")
         assert sf.exists()
 
         cfgs.each{cfg ->
@@ -117,7 +117,7 @@ void processPages(File source, File jcrRoot) {
     def templates = loadTemplates()
     def replacements = loadReplacements()
     
-    def pageFile = new File('work/config/page-mappings.csv')
+    def pageFile = new File("work${File.separator}config${File.separator}page-mappings.csv")
     def count = 0
     def migrated = 0
     println 'Processing pages...'
@@ -151,9 +151,8 @@ void processPages(File source, File jcrRoot) {
             template.renderPage(pageData, inXml, outXml, replacements)
 
             println 'Creating parent folder...'
-            def targetFile = new File(pageData['New Path']+'/.content.xml',jcrRoot)
-            targetFile.mkdirs()
-            targetFile.delete()
+            def targetFile = new File("${pageData['New Path']}${File.separator}.content.xml",jcrRoot)
+            targetFile.getParentFile().mkdirs()
 
             println "Writing results to $targetFile"
             targetFile.write(writer.toString(),ENCODING)
@@ -181,7 +180,7 @@ void processFiles(File source, File jcrRoot){
 </jcr:root>
 '''
     def tika = new Tika()
-    def files = new File('work/config/file-mappings.csv')
+    def files = new File("work${File.separator}config${File.separator}file-mappings.csv")
     def count = 0
     def migrated = 0
     println 'Processing files...'
@@ -198,12 +197,12 @@ void processFiles(File source, File jcrRoot){
         originalDirXml.'jcr:root'('xmlns:jcr':'http://www.jcp.org/jcr/1.0','xmlns:nt':'http://www.jcp.org/jcr/nt/1.0','jcr:primaryType':'nt:file'){
             'jcr:content'('jcr:mimeType': mimeType, 'jcr:primaryType': 'nt:resource')
         }
-        def originalDir = new File('_jcr_content/renditions/original.dir/.content.xml',assetRoot)
+        def originalDir = new File("_jcr_content${File.separator}renditions${File.separator}original.dir${File.separator}.content.xml",assetRoot)
         originalDir.getParentFile().mkdirs()
         originalDir << writer.toString()
         
         println 'Copying original file...'
-        Files.copy(sourceFile.toPath(), new File('_jcr_content/renditions/original',assetRoot).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
+        Files.copy(sourceFile.toPath(), new File("_jcr_content${File.separator}renditions${File.separator}original",assetRoot).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
         
         println 'Writing .content.xml...'
         new File('.content.xml',assetRoot) << contentXml
@@ -213,12 +212,12 @@ void processFiles(File source, File jcrRoot){
 def configDir = new File(args[0])
 assert configDir.exists()
 println 'Copying configuration to work dir...'
-def workConfig = new File('work/config')
+def workConfig = new File("work${File.separator}config")
 if(!workConfig.exists()){
     workConfig.mkdirs()
 }
 configDir.eachFile (FileType.FILES) { file ->
-    Files.copy(file.toPath(), new File(workConfig.getAbsolutePath()+'/'+file.getName()).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
+    Files.copy(file.toPath(), new File(workConfig.getAbsolutePath()+File.separator+file.getName()).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
 }
 
 def base = new File('work')
@@ -236,13 +235,13 @@ processPages(source,jcrRoot)
 processFiles(source,jcrRoot)
 
 println 'Updating filter.xml...'
-def vlt = new File('META-INF/vault',target)
+def vlt = new File("META-INF${File.separator}vault",target)
 vlt.mkdirs()
 if(batch?.trim()){
     def writer = new StringWriter()
     def filterXml = new MarkupBuilder(writer)
     
-    def pageFile = new File('work/config/page-mappings.csv')
+    def pageFile = new File("work${File.separator}config${File.separator}page-mappings.csv")
     
     filterXml.'workspaceFilter'('version':'1.0'){
         for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
@@ -253,7 +252,7 @@ if(batch?.trim()){
                 }
             }
         }
-        for (fileData in parseCsv(new File('work/config/file-mappings.csv').getText(ENCODING), separator: SEPARATOR)) {
+        for (fileData in parseCsv(new File("work${File.separator}config${File.separator}file-mappings.csv").getText(ENCODING), separator: SEPARATOR)) {
             if(batch.equals(fileData['Batch']) && 'Remove' != fileData[0] && 'Missing' != fileData[0]){
                 'filter'('root':fileData['Target']){
                     'include'('pattern':fileData['Target'])
@@ -277,9 +276,9 @@ new File('properties.xml',vlt) << propertiesXml.getText().replace('${version}',t
 
 println 'Creating package...'
 def ant = new AntBuilder()
-ant.zip(destfile: "${base.getAbsolutePath()}/migrated-content-${today}.zip", basedir: target)
+ant.zip(destfile: "${base.getAbsolutePath()}${File.separator}migrated-content-${today}.zip", basedir: target)
 
-println "Package saved to: work/migrated-content-${today}.zip"
+println "Package saved to: work${File.separator}migrated-content-${today}.zip"
 
 println "Content migrated in ${TimeCategory.minus(new Date(), start)}"
 
