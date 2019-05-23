@@ -199,13 +199,17 @@ void processFiles(File source, File jcrRoot){
         }
         def originalDir = new File("_jcr_content${File.separator}renditions${File.separator}original.dir${File.separator}.content.xml",assetRoot)
         originalDir.getParentFile().mkdirs()
-        originalDir << writer.toString()
+        originalDir.newWriter().withWriter { w ->
+            w << writer.toString()
+        }
         
         println 'Copying original file...'
         Files.copy(sourceFile.toPath(), new File("_jcr_content${File.separator}renditions${File.separator}original",assetRoot).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
         
         println 'Writing .content.xml...'
-        new File('.content.xml',assetRoot) << contentXml
+        new File('.content.xml',assetRoot).newWriter().withWriter { w ->
+            w << contentXml
+        }
     }
 }
 
@@ -268,17 +272,17 @@ if(batch?.trim()){
     Files.copy(filter.toPath(), new File('filter.xml',vlt).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
 }
 
-def today = new Date().format("yyyy-MM-dd")
+def now = new Date().format("yyyy-MM-dd-HH-mm-ss")
 println 'Updating properties.xml...'
 def propertiesXml = new File('properties.xml',workConfig)
 assert propertiesXml.exists()
-new File('properties.xml',vlt) << propertiesXml.getText().replace('${version}',today)
+new File('properties.xml',vlt) << propertiesXml.getText().replace('${version}',now).replace('${name}',"migrated-content-${configDir.getName()}")
 
 println 'Creating package...'
 def ant = new AntBuilder()
-ant.zip(destfile: "${base.getAbsolutePath()}${File.separator}migrated-content-${today}.zip", basedir: target)
+ant.zip(destfile: "${base.getAbsolutePath()}${File.separator}migrated-content-${configDir.getName()}-${now}.zip", basedir: target)
 
-println "Package saved to: work${File.separator}migrated-content-${today}.zip"
+println "Package saved to: work${File.separator}migrated-content-${configDir.getName()}-${now}.zip"
 
 println "Content migrated in ${TimeCategory.minus(new Date(), start)}"
 
