@@ -63,4 +63,4 @@ This function will be called by the migration script with:
  - **outXml** - The .content.xml file to which to write the migrated content
  - **replacements** - a map of replacement strings
  
-Additionally, a .commons.groovy is provided to handle a number of common AEM structures including components, the page metadata and performing replacements. See the `templates/content.groovy` template as an example.
+Additionally, a .commons.groovy is provided to handle a number of common AEM structures including components, the page metadata and performing replacements. See the `templates/content.groovy` template as an example.  You will need to modify the path to the desired page component for the sling:resourceType when setting the page properties in the groovy template script.
