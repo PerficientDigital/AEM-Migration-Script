@@ -1,4 +1,4 @@
-import groovy.util.slurpersupport.GPathResult
+import groovy.xml.slurpersupport.GPathResult
 import groovy.xml.MarkupBuilder
 
 
@@ -17,18 +17,24 @@ Map pageProperties(Object pageData, GPathResult inXml, String template){
     pageProperties(pageData, inXml, template, null)
 }
 
-Map pageProperties(Object pageData, GPathResult inXml, String template, Map replacements){
+Map pageProperties(Object pageData, GPathResult inXml, String template, String resourceType, Map replacements){
     def pageProperties = [:]
     pageProperties['jcr:primaryType']='cq:PageContent'
-    pageProperties['jcr:title'] = inXml.metadata.title.toString()
+    def pageTitle = inXml.metadata.title.toString()
+    if (pageTitle.isEmpty())
+        pageTitle = inXml.title.toString()
+    pageProperties['jcr:title'] = pageTitle
+
     pageProperties['cq:contextHubPath'] = '/etc/cloudsettings/default/contexthub'
     pageProperties['cq:contextHubSegmentsPath'] = '/etc/segmentation/contexthub'
     pageProperties['cq:template'] = template
-    pageProperties['sling:resourceType'] = 'sample/components/structure/page'
+    pageProperties['sling:resourceType'] = resourceType
     pageProperties['legacyPath'] = pageData['Source Path']
     pageProperties['migrationBatch'] = pageData['Batch']
     
     def description = inXml.metadata.description.toString()
+    if (description.isEmpty())
+        description = inXml.description.toString()
     if(description?.trim()) {
         pageProperties['jcr:description'] = description
     }
