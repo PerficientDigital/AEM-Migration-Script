@@ -1,11 +1,11 @@
-import groovy.util.slurpersupport.GPathResult
+import groovy.xml.slurpersupport.GPathResult
 import groovy.xml.MarkupBuilder
 
 void renderPage(Object pageData, GPathResult inXml, MarkupBuilder outXml, Map replacements){
 
     GroovyShell shell = new GroovyShell()
     def commons = shell.parse(new File('templates/.commons.groovy').text)
-    def pageProperties = commons.pageProperties(pageData, inXml, '/conf/sample/settings/wcm/templates/content-page',replacements)
+    def pageProperties = commons.pageProperties(pageData, inXml, '/conf/sample/settings/wcm/templates/content-page','sample/components/structure/page', replacements)
     
     outXml.'jcr:root'(commons.rootProperties()) {
         'jcr:content'(pageProperties) {

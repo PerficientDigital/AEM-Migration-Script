@@ -30,8 +30,8 @@ import groovy.json.JsonSlurper
 import groovy.time.TimeCategory
 import groovy.time.TimeDuration
 import groovy.transform.Field
-import groovy.util.AntBuilder
-import groovy.util.XmlSlurper
+import groovy.ant.AntBuilder
+import groovy.xml.XmlSlurper
 
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
