@@ -18,6 +18,8 @@
 *  Migration script for migrating legacy content using an AEM Content Package
 *  See: https://github.com/PerficientDigital/AEM-Migration-Script
 */
+@Grab('org.apache.commons:commons-lang3:3.12.0')
+
 @Grab('com.xlson.groovycsv:groovycsv:1.3')
 import static com.xlson.groovycsv.CsvParser.parseCsv
 
@@ -29,18 +31,12 @@ import groovy.xml.MarkupBuilder
 import groovy.json.JsonSlurper
 import groovy.time.TimeCategory
 import groovy.time.TimeDuration
-import groovy.transform.Field
 import groovy.ant.AntBuilder
 import groovy.xml.XmlSlurper
 
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-
-// configure settings here
-@Field 
-final SEPARATOR = ","
-@Field 
-final ENCODING = "UTF-8"
+import com.opencsv.CSVReader
 
 start = new Date()
 
@@ -73,7 +69,7 @@ Map loadReplacements() {
 
         cfgs.each{cfg ->
             println "Processing configuration: ${cfg}"
-            def source = parseCsv(sf.getText(ENCODING), separator: SEPARATOR)
+            def source = parseCsv(sf.getText("UTF-8"), separator: ",")
             for (line in source) {
                 if(cfg.mode == 'mapping'){
                     replacements[line[cfg.sourceKey]] = line[cfg.targetKey]
@@ -112,7 +108,7 @@ Map loadTemplates() {
     return templates
 }
 
-void processPages(File source, File jcrRoot) {
+void processPages(String source, String jcrRoot) {
     
     def templates = loadTemplates()
     def replacements = loadReplacements()
@@ -121,7 +117,7 @@ void processPages(File source, File jcrRoot) {
     def count = 0
     def migrated = 0
     println 'Processing pages...'
-    for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
+    for (pageData in parseCsv(pageFile.getText("UTF-8"), separator: ",")) {
 
         println "Processing page ${count + 1}"
 
@@ -137,12 +133,12 @@ void processPages(File source, File jcrRoot) {
             def template = templates[pageData['Template']]
             assert template : "Template ${pageData['Template']} not found!"
 
-            def sourceFile = new File(pageData['Source Path'],source)
+            def sourceFile = new File(source,pageData['Source Path'])
             assert sourceFile.exists() : "Source file ${sourceFile} not found!"
 
             println "Using template ${pageData['Template']} for ${sourceFile}"
 
-            def inXml = new XmlSlurper().parseText(sourceFile.getText(ENCODING))
+            def inXml = new XmlSlurper().parseText(sourceFile.getText("UTF-8"))
 
             def writer = new StringWriter()
             def outXml = new MarkupBuilder(writer)
@@ -151,11 +147,11 @@ void processPages(File source, File jcrRoot) {
             template.renderPage(pageData, inXml, outXml, replacements)
 
             println 'Creating parent folder...'
-            def targetFile = new File("${pageData['New Path']}${File.separator}.content.xml",jcrRoot)
+            def targetFile = new File(jcrRoot,"${pageData['New Path']}${File.separator}.content.xml")
             targetFile.getParentFile().mkdirs()
 
             println "Writing results to $targetFile"
-            targetFile.write(writer.toString(),ENCODING)
+            targetFile.write(writer.toString(),"UTF-8")
             migrated++
         } else {
             println 'No action required...'
@@ -166,7 +162,7 @@ void processPages(File source, File jcrRoot) {
     println "${count} pages processed and ${migrated} migrated in ${TimeCategory.minus(new Date(), start)}"
 }
 
-void processFiles(File source, File jcrRoot){
+void processFiles(String source, String jcrRoot){
     
     def contentXml = '''<?xml version="1.0" encoding="UTF-8"?>
 <jcr:root xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dam="http://www.day.com/dam/1.0" xmlns:cq="http://www.day.com/jcr/cq/1.0" xmlns:jcr="http://www.jcp.org/jcr/1.0" xmlns:mix="http://www.jcp.org/jcr/mix/1.0" xmlns:nt="http://www.jcp.org/jcr/nt/1.0"
@@ -184,9 +180,9 @@ void processFiles(File source, File jcrRoot){
     def count = 0
     def migrated = 0
     println 'Processing files...'
-    for (fileData in parseCsv(files.getText(ENCODING), separator: SEPARATOR)) {
-        def assetRoot = new File(fileData['Target'], jcrRoot)
-        def sourceFile = new File(fileData['Source'], source)
+    for (fileData in parseCsv(files.getText("UTF-8"), separator: ",")) {
+        def assetRoot = new File(jcrRoot,fileData['Target'].toString())
+        def sourceFile = new File(source,fileData['Source'].toString())
         def mimeType = tika.detect(sourceFile)
         
         println "Processing Source: ${sourceFile} Target: ${assetRoot}"
@@ -197,17 +193,17 @@ void processFiles(File source, File jcrRoot){
         originalDirXml.'jcr:root'('xmlns:jcr':'http://www.jcp.org/jcr/1.0','xmlns:nt':'http://www.jcp.org/jcr/nt/1.0','jcr:primaryType':'nt:file'){
             'jcr:content'('jcr:mimeType': mimeType, 'jcr:primaryType': 'nt:resource')
         }
-        def originalDir = new File("_jcr_content${File.separator}renditions${File.separator}original.dir${File.separator}.content.xml",assetRoot)
+        def originalDir = new File(assetRoot,"_jcr_content${File.separator}renditions${File.separator}original.dir${File.separator}.content.xml")
         originalDir.getParentFile().mkdirs()
         originalDir.newWriter().withWriter { w ->
             w << writer.toString()
         }
         
         println 'Copying original file...'
-        Files.copy(sourceFile.toPath(), new File("_jcr_content${File.separator}renditions${File.separator}original",assetRoot).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
+        Files.copy(sourceFile.toPath(), new File(assetRoot,"_jcr_content${File.separator}renditions${File.separator}original").toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
         
         println 'Writing .content.xml...'
-        new File('.content.xml',assetRoot).newWriter().withWriter { w ->
+        new File(assetRoot,'.content.xml').newWriter().withWriter { w ->
             w << contentXml
         }
     }
@@ -225,21 +221,27 @@ configDir.eachFile (FileType.FILES) { file ->
 }
 
 def base = new File('work')
-def source = new File('source',base)
-println "Using source: ${source}"
-def target = new File('target',base)
-def jcrRoot = new File('jcr_root',target)
-println "Using target: ${target}"
+def source = new File(base, 'source')
+println "Using source: ${source.path}"
+def target = new File(base, 'target')
+def jcrRoot = new File(target, 'jcr_root')
+println "Using target: ${target.path}"
 
 println 'Clearing target...'
-target.deleteDir();
-target.mkdir();
+target.deleteDir()
+target.mkdir()
+jcrRoot.mkdir()
 
-processPages(source,jcrRoot)
-processFiles(source,jcrRoot)
+// Create the parent directories of the target file
+def targetFile = new File(jcrRoot, '.content.xml')
+targetFile.parentFile.mkdirs()
+
+processPages(source.path,jcrRoot.path)
+processFiles(source.path,jcrRoot.path)
+
 
 println 'Updating filter.xml...'
-def vlt = new File("META-INF${File.separator}vault",target)
+def vlt = new File(target,"META-INF${File.separator}vault")
 vlt.mkdirs()
 if(batch?.trim()){
     def writer = new StringWriter()
@@ -248,7 +250,7 @@ if(batch?.trim()){
     def pageFile = new File("work${File.separator}config${File.separator}page-mappings.csv")
     
     filterXml.'workspaceFilter'('version':'1.0'){
-        for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
+        for (pageData in parseCsv(pageFile.getText("UTF-8"), separator: ",")) {
             if(batch.equals(pageData['Batch']) && 'Remove' != pageData[0] && 'Missing' != pageData[0]){
                 'filter'('root':pageData['New Path']){
                     'include'('pattern':pageData['New Path'])
@@ -256,7 +258,7 @@ if(batch?.trim()){
                 }
             }
         }
-        for (fileData in parseCsv(new File("work${File.separator}config${File.separator}file-mappings.csv").getText(ENCODING), separator: SEPARATOR)) {
+        for (fileData in parseCsv(new File("work${File.separator}config${File.separator}file-mappings.csv").getText("UTF-8"), separator: ",")) {
             if(batch.equals(fileData['Batch']) && 'Remove' != fileData[0] && 'Missing' != fileData[0]){
                 'filter'('root':fileData['Target']){
                     'include'('pattern':fileData['Target'])
@@ -267,16 +269,16 @@ if(batch?.trim()){
     }
     new File('filter.xml',vlt) << writer.toString()
 } else {
-    def filter = new File('filter.xml',workConfig)
+    def filter = new File(workConfig, 'filter.xml')
     assert filter.exists()
-    Files.copy(filter.toPath(), new File('filter.xml',vlt).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
+    Files.copy(filter.toPath(), new File(vlt, 'filter.xml').toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
 }
 
 def now = new Date().format("yyyy-MM-dd-HH-mm-ss")
 println 'Updating properties.xml...'
-def propertiesXml = new File('properties.xml',workConfig)
+def propertiesXml = new File(workConfig,'properties.xml')
 assert propertiesXml.exists()
-new File('properties.xml',vlt) << propertiesXml.getText().replace('${version}',now).replace('${name}',"migrated-content-${configDir.getName()}")
+new File(vlt,'properties.xml') << propertiesXml.getText().replace('${version}',now).replace('${name}',"migrated-content-${configDir.getName()}")
 
 println 'Creating package...'
 def ant = new AntBuilder()

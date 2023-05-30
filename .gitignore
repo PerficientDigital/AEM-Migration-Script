@@ -7,3 +7,4 @@ filter.xml
 .DS_Store
 
 work/
+migrate_chipCopy.groovy
