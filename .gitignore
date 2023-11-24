@@ -3,6 +3,7 @@ file-mappings.txt
 filter.xml
 *.iml
 *.log
+lib/
 .idea/
 # Mac
 .DS_Store
