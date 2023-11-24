@@ -12,7 +12,7 @@ Map component(String resourceType, Map properties) {
     properties.each{ k, v -> p[k] = v }
     return p
 }
-
+/*
 Map pageProperties(Object pageData, GPathResult inXml, String template){
     pageProperties(pageData, inXml, template, null)
 }
@@ -40,7 +40,7 @@ Map pageProperties(Object pageData, GPathResult inXml, String template, String r
     }
     return pageProperties
 }
-
+*/
 String replace(String source, Map replacements){
     replacements.each{ k, v -> 
         if(source.contains(k)){
@@ -49,7 +49,7 @@ String replace(String source, Map replacements){
     }
     return source
 }
-
+/*
 Map rootProperties() {
     def p = [:]
     p['xmlns:cq']='http://www.day.com/jcr/cq/1.0'
@@ -65,3 +65,4 @@ Map unstructured() {
     p['jcr:primaryType']='nt:unstructured'
     return p
 }
+*/

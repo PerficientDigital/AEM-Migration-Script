@@ -1,18 +1,25 @@
-import groovy.xml.slurpersupport.GPathResult
+package templates
+
+import classes.JCRNodeTemplates
+import classes.PageMappingsCSV
+import classes.PageXML
 import groovy.xml.MarkupBuilder
 
-void renderPage(Object pageData, GPathResult inXml, MarkupBuilder outXml, Map replacements){
 
-    GroovyShell shell = new GroovyShell()
-    def commons = shell.parse(new File('templates/.commons.groovy').text)
-    def pageProperties = commons.pageProperties(pageData, inXml, '/conf/sample/settings/wcm/templates/content-page','sample/components/structure/page', replacements)
+void renderPage(PageMappingsCSV pageMappingsCSV, PageXML pageXml, MarkupBuilder outXml, Map replacements){
+
+    def pageTemplate = '/conf/sample/settings/wcm/templates/content-page'
+    def pageResourceType = 'sample/components/structure/page'
+
+
+    def pageProperties = JCRNodeTemplates.pageContentNode(pageMappingsCSV, pageXml ,pageResourceType,pageTemplate)
     
-    outXml.'jcr:root'(commons.rootProperties()) {
+    outXml.'jcr:root'(JCRNodeTemplates.pageNode()) {
         'jcr:content'(pageProperties) {
-            'root'(commons.component('wcm/foundation/components/responsivegrid')){
-                'responsivegrid'(commons.component('wcm/foundation/components/responsivegrid')){
-                    'title'(commons.component('sample/components/content/title', ['fontSize': 'h1', 'header': inXml.metadata.title.toString()]))
-                    'text'(commons.component('sample/components/content/text', ['textIsRich': true, 'text': inXml.content.toString()]))
+            'root'(JCRNodeTemplates.componentNode('wcm/foundation/components/responsivegrid')){
+                'responsivegrid'(JCRNodeTemplates.componentNode('wcm/foundation/components/responsivegrid')){
+                    'title'(JCRNodeTemplates.componentNode('sample/components/content/title', ['fontSize': 'h1', 'header': pageXml.getTitle()]))
+                    'text'(JCRNodeTemplates.componentNode('sample/components/content/text', ['textIsRich': true, 'text': pageXml.getContent()]))
                 }
             }
         }

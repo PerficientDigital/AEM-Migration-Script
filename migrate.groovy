@@ -1,4 +1,8 @@
 #!/usr/bin/env groovy
+import classes.JCRNodeTemplates
+import classes.PageMappingsCSV
+import classes.PageXML
+
 /*
 *  This program is free software: you can redistribute it and/or modify
 *  it under the terms of the GNU General Public License as published by
@@ -42,18 +46,7 @@ final SEPARATOR = ","
 @Field 
 final ENCODING = "UTF-8"
 
-start = new Date()
 
-if(args.length < 1) {
-    println 'groovy migrate.groovy [configdir] [batch (Optional)]'
-    System.exit(1)
-}
-
-batch = ""
-if(args.length == 2) {
-    batch = args[1]
-    println "Using batch ${batch}"
-}
 
 Map loadReplacements() {
     def count = 0
@@ -112,7 +105,7 @@ Map loadTemplates() {
     return templates
 }
 
-void processPages(File source, File jcrRoot) {
+void processPages(File source, File jcrRoot, String batch = "") {
     
     def templates = loadTemplates()
     def replacements = loadReplacements()
@@ -121,40 +114,34 @@ void processPages(File source, File jcrRoot) {
     def count = 0
     def migrated = 0
     println 'Processing pages...'
-    for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
+    for (row in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
+        PageMappingsCSV pageMapping = new PageMappingsCSV(row)
 
         println "Processing page ${count + 1}"
 
-        def process = true
-        if(batch?.trim() && !batch.equals(pageData['Batch'])){
-            process = false
-        }
-        if('Remove' == pageData[0] || 'Missing' == pageData[0]) {
-            process = false
-        }
-        if(process){
+        if( pageMapping.processPage(batch) ){
+            def template = templates[pageMapping.getTemplate()]
+            assert template : "Template ${pageMapping.getTemplate()} not found!"
 
-            def template = templates[pageData['Template']]
-            assert template : "Template ${pageData['Template']} not found!"
-
-            def sourceFile = new File(pageData['Source Path'],source)
+            def sourceFile = new File(pageMapping.getSourcePath(),source)
             assert sourceFile.exists() : "Source file ${sourceFile} not found!"
 
-            println "Using template ${pageData['Template']} for ${sourceFile}"
+            println "Using template ${pageMapping.getTemplate()} for ${sourceFile}"
 
-            def inXml = new XmlSlurper().parseText(sourceFile.getText(ENCODING))
+            def pageXml = new PageXML(new XmlSlurper().parseText(sourceFile.getText(ENCODING)))
 
             def writer = new StringWriter()
             def outXml = new MarkupBuilder(writer)
 
             println 'Rendering page...'
-            template.renderPage(pageData, inXml, outXml, replacements)
+            template.renderPage(pageMapping, pageXml, outXml, replacements)
 
             println 'Creating parent folder...'
-            def targetFile = new File("${pageData['New Path']}${File.separator}.content.xml",jcrRoot)
+            def targetFile = new File("${pageMapping.getNewPath()}${File.separator}.content.xml",jcrRoot)
             targetFile.getParentFile().mkdirs()
 
             println "Writing results to $targetFile"
+
             targetFile.write(writer.toString(),ENCODING)
             migrated++
         } else {
@@ -166,24 +153,15 @@ void processPages(File source, File jcrRoot) {
     println "${count} pages processed and ${migrated} migrated in ${TimeCategory.minus(new Date(), start)}"
 }
 
-void processFiles(File source, File jcrRoot){
+void processAssets(File source, File jcrRoot){
     
-    def contentXml = '''<?xml version="1.0" encoding="UTF-8"?>
-<jcr:root xmlns:exif="http://ns.adobe.com/exif/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dam="http://www.day.com/dam/1.0" xmlns:cq="http://www.day.com/jcr/cq/1.0" xmlns:jcr="http://www.jcp.org/jcr/1.0" xmlns:mix="http://www.jcp.org/jcr/mix/1.0" xmlns:nt="http://www.jcp.org/jcr/nt/1.0"
-    jcr:primaryType="dam:Asset">
-    <jcr:content
-        jcr:primaryType="dam:AssetContent">
-        <metadata
-            jcr:primaryType="nt:unstructured"/>
-        <related jcr:primaryType="nt:unstructured"/>
-    </jcr:content>
-</jcr:root>
-'''
+    def assetXml = JCRNodeTemplates.assetXml()
     def tika = new Tika()
     def files = new File("work${File.separator}config${File.separator}file-mappings.csv")
     def count = 0
     def migrated = 0
-    println 'Processing files...'
+    println 'Processing assets...'
+    //expect csv to just have batch, source, and target
     for (fileData in parseCsv(files.getText(ENCODING), separator: SEPARATOR)) {
         def assetRoot = new File(fileData['Target'], jcrRoot)
         def sourceFile = new File(fileData['Source'], source)
@@ -203,87 +181,115 @@ void processFiles(File source, File jcrRoot){
             w << writer.toString()
         }
         
-        println 'Copying original file...'
+        println 'Copying original asset...'
         Files.copy(sourceFile.toPath(), new File("_jcr_content${File.separator}renditions${File.separator}original",assetRoot).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
         
-        println 'Writing .content.xml...'
+        println 'Writing asset .content.xml...'
         new File('.content.xml',assetRoot).newWriter().withWriter { w ->
-            w << contentXml
+            w << assetXml
         }
     }
 }
 
-def configDir = new File(args[0])
-assert configDir.exists()
-println 'Copying configuration to work dir...'
-def workConfig = new File("work${File.separator}config")
-if(!workConfig.exists()){
-    workConfig.mkdirs()
-}
-configDir.eachFile (FileType.FILES) { file ->
-    Files.copy(file.toPath(), new File(workConfig.getAbsolutePath()+File.separator+file.getName()).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
-}
+void generateFilter(batch) {
+    println 'Updating filter.xml...'
+    def vlt = new File("META-INF${File.separator}vault", target)
+    vlt.mkdirs()
+    if (batch?.trim()) {
+        def writer = new StringWriter()
+        def filterXml = new MarkupBuilder(writer)
 
-def base = new File('work')
-def source = new File('source',base)
-println "Using source: ${source}"
-def target = new File('target',base)
-def jcrRoot = new File('jcr_root',target)
-println "Using target: ${target}"
+        def pageFile = new File("work${File.separator}config${File.separator}page-mappings.csv")
 
-println 'Clearing target...'
-target.deleteDir();
-target.mkdir();
-
-processPages(source,jcrRoot)
-processFiles(source,jcrRoot)
-
-println 'Updating filter.xml...'
-def vlt = new File("META-INF${File.separator}vault",target)
-vlt.mkdirs()
-if(batch?.trim()){
-    def writer = new StringWriter()
-    def filterXml = new MarkupBuilder(writer)
-    
-    def pageFile = new File("work${File.separator}config${File.separator}page-mappings.csv")
-    
-    filterXml.'workspaceFilter'('version':'1.0'){
-        for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
-            if(batch.equals(pageData['Batch']) && 'Remove' != pageData[0] && 'Missing' != pageData[0]){
-                'filter'('root':pageData['New Path']){
-                    'include'('pattern':pageData['New Path'])
-                    'include'('pattern':"${pageData['New Path']}/jcr:content.*")
+        filterXml.'workspaceFilter'('version': '1.0') {
+            for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
+                PageMappingsCSV pageMapping = new PageMappingsCSV(pageData)
+                if (pageMapping.processPage(batch)) {
+                    'filter'('root': pageMapping.getNewPath()) {
+                        'include'('pattern': pageMapping.getNewPath())
+                        'include'('pattern': "${pageMapping.getNewPath()}/jcr:content.*")
+                    }
+                }
+            }
+            for (fileData in parseCsv(new File("work${File.separator}config${File.separator}file-mappings.csv").getText(ENCODING), separator: SEPARATOR)) {
+                if (batch.equals(fileData['Batch']) && 'Remove' != fileData[0] && 'Missing' != fileData[0]) {
+                    'filter'('root': fileData['Target']) {
+                        'include'('pattern': fileData['Target'])
+                        'include'('pattern': "${fileData['Target']}/jcr:content.*")
+                    }
                 }
             }
         }
-        for (fileData in parseCsv(new File("work${File.separator}config${File.separator}file-mappings.csv").getText(ENCODING), separator: SEPARATOR)) {
-            if(batch.equals(fileData['Batch']) && 'Remove' != fileData[0] && 'Missing' != fileData[0]){
-                'filter'('root':fileData['Target']){
-                    'include'('pattern':fileData['Target'])
-                    'include'('pattern':"${fileData['Target']}/jcr:content.*")
-                }
-            }
-        }
+        new File('filter.xml', vlt) << writer.toString()
+    } else {
+        def filter = new File('filter.xml', workConfig)
+        assert filter.exists()
+        Files.copy(filter.toPath(), new File('filter.xml', vlt).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
     }
-    new File('filter.xml',vlt) << writer.toString()
-} else {
-    def filter = new File('filter.xml',workConfig)
-    assert filter.exists()
-    Files.copy(filter.toPath(), new File('filter.xml',vlt).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
 }
 
-def now = new Date().format("yyyy-MM-dd-HH-mm-ss")
-println 'Updating properties.xml...'
-def propertiesXml = new File('properties.xml',workConfig)
-assert propertiesXml.exists()
-new File('properties.xml',vlt) << propertiesXml.getText().replace('${version}',now).replace('${name}',"migrated-content-${configDir.getName()}")
+void generatePropertiesXml(File workFolder, String createTime) {
+    println 'Updating properties.xml...'
+    def propertiesXml = new File('properties.xml', workFolder)
+    assert propertiesXml.exists()
+    new File('properties.xml', vlt) << propertiesXml.getText().replace('${version}', createTime).replace('${name}', "migrated-content-${configDir.getName()}")
+}
 
-println 'Creating package...'
-def ant = new AntBuilder()
-ant.zip(destfile: "${base.getAbsolutePath()}${File.separator}migrated-content-${configDir.getName()}-${now}.zip", basedir: target)
 
-println "Package saved to: work${File.separator}migrated-content-${configDir.getName()}-${now}.zip"
 
-println "Content migrated in ${TimeCategory.minus(new Date(), start)}"
+void main(args) {
+    def start = new Date()
+    String createTime = start.format("yyyy-MM-dd-HH-mm-ss")
 
-println "Package created successfully!!!"
+    if(args.length < 1) {
+        println 'groovy migrate.groovy [configdir] [batch (Optional)]'
+        System.exit(1)
+    }
+
+    String batch = ""
+
+    if(args.length == 2) {
+        batch = args[1]
+        println "Using batch ${batch}"
+    }
+
+    //initiate all files
+    def configDir = new File(args[0])
+    assert configDir.exists()
+    def base = new File('work')
+    def source = new File('source', base)
+    def target = new File('target', base)
+    def jcrRoot = new File('jcr_root', target)
+    def workConfig = new File("work${File.separator}config")
+    if(!workConfig.exists()){
+        workConfig.mkdirs()
+    }
+
+    println "Using source: ${source}"
+    println "Using target: ${target}"
+    println 'Copying configuration to work dir...'
+
+
+
+    configDir.eachFile (FileType.FILES) { file ->
+        Files.copy(file.toPath(), new File(workConfig.getAbsolutePath()+File.separator+file.getName()).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
+    }
+
+    println 'Clearing target...'
+    target.deleteDir();
+    target.mkdir();
+
+    processPages(source, jcrRoot, batch)
+    processAssets(source, jcrRoot)
+    generateFilter(batch)
+    generatePropertiesXml(workConfig,createTime)
+
+    println 'Creating package...'
+    def ant = new AntBuilder()
+    ant.zip(destfile: "${base.getAbsolutePath()}${File.separator}migrated-content-${configDir.getName()}-${createTime}.zip", basedir: target)
+    println "Package saved to: work${File.separator}migrated-content-${configDir.getName()}-${createTime}.zip"
+    println "Content migrated in ${TimeCategory.minus(new Date(), start)}"
+    println "Package created successfully!!!"
+}
+
+main(args)

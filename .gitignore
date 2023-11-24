@@ -1,8 +1,9 @@
 page-mappings.txt
 file-mappings.txt
 filter.xml
+*.iml
 *.log
-
+.idea/
 # Mac
 .DS_Store
 
