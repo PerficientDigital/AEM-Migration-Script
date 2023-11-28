@@ -6,11 +6,11 @@ import com.perficient.aemmigration.main.PageXML
 import com.perficient.aemmigration.main.JCRNodeTemplates
 import groovy.xml.MarkupBuilder
 
-class TestTemplate {//implements AEMTemplate {
+class TestTemplate implements AEMTemplate {
 
     void renderPage(PageMappingsCSV pageMappingsCSV, PageXML pageXml, MarkupBuilder  outXml, Map replacements){
 
-        def pageTemplate = '/conf/sample/settings/wcm/com.perficient.aemmigration.templates/content-page'
+        def pageTemplate = '/conf/sample/settings/wcm/templates/content-page'
         def pageResourceType = 'sample/components/structure/page'
 
         def pageProperties = JCRNodeTemplates.pageContentNode(pageMappingsCSV, pageXml ,pageTemplate,pageResourceType)
