@@ -1,5 +1,0 @@
-package classes
-
-class XMLHelpers {
-
-}

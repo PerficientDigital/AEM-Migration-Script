@@ -1,10 +1,8 @@
-package classes
-
-import groovy.xml.slurpersupport.GPathResult
+package com.perficient.aemmigration.main
 
 class JCRNodeTemplates {
 
-    static Map pageNode() {
+   static Map pageNode() {
         def p = [:]
         p['xmlns:cq']='http://www.day.com/jcr/cq/1.0'
         p['xmlns:jcr']='http://www.jcp.org/jcr/1.0'
@@ -14,7 +12,8 @@ class JCRNodeTemplates {
         return p
     }
 
-    static Map pageContentNode(PageMappingsCSV legacyPageData, PageXML pageXml, String pageTemplate , String pageResourceType){
+
+    static Map pageContentNode(PageMappingsCSV legacyPageData, PageXML pageXml, String pageTemplate, String pageResourceType){
             def pageProperties = [:]
             pageProperties['jcr:primaryType']='cq:PageContent'
             pageProperties['jcr:title'] = pageXml.getTitle()
@@ -35,7 +34,7 @@ class JCRNodeTemplates {
         return p
     }
 
-    static componentNode(String resourceType, Map properties = [:]){
+    static Map componentNode(String resourceType, Map properties = [:]){
         def p = unstructuredNode()
         p['sling:resourceType']=resourceType
         properties.each{ k, v -> p[k] = v }

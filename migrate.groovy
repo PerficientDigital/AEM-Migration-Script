@@ -1,7 +1,5 @@
 #!/usr/bin/env groovy
-import classes.JCRNodeTemplates
-import classes.PageMappingsCSV
-import classes.PageXML
+
 
 /*
 *  This program is free software: you can redistribute it and/or modify
@@ -27,12 +25,10 @@ import static com.xlson.groovycsv.CsvParser.parseCsv
 
 @Grab('org.apache.tika:tika-core:1.14')
 import org.apache.tika.Tika;
-
 import groovy.io.FileType
 import groovy.xml.MarkupBuilder
 import groovy.json.JsonSlurper
 import groovy.time.TimeCategory
-import groovy.time.TimeDuration
 import groovy.transform.Field
 import groovy.ant.AntBuilder
 import groovy.xml.XmlSlurper
@@ -40,13 +36,27 @@ import groovy.xml.XmlSlurper
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+import com.perficient.aemmigration.main.*
+import com.perficient.aemmigration.main.impl.*
+import com.perficient.aemmigration.templates.*
+
 // configure settings here
 @Field 
-final SEPARATOR = ","
+final String SEPARATOR = ","
 @Field 
-final ENCODING = "UTF-8"
+final String ENCODING = "UTF-8"
 
+if(args.length < 1) {
+    println 'groovy migrate.groovy [configdir] [batch (Optional)]'
+    System.exit(1)
+}
 
+String batch = ""
+
+if(args.length == 2) {
+    batch = args[1]
+    println "Using batch ${batch}"
+}
 
 Map loadReplacements() {
     def count = 0
@@ -83,58 +93,49 @@ Map loadReplacements() {
         }
     }
 
-    println "Generated ${count} replacements in ${TimeCategory.minus(new Date(), start)}"
+    println "Generated ${count} replacements."
     
     return replacements
 }
 
-Map loadTemplates() {
-    println 'Loading templates...'
-    def count = 0
-    def templates = [:]
-    GroovyShell shell = new GroovyShell()
-    new File('templates').eachFile (FileType.FILES) { template ->
-        if(!template.getName().startsWith('.') && template.getName().endsWith('groovy')){
-            def name = template.getName().replace('.groovy','')
-            println "Loading template $template as $name"
-            templates[name] = shell.parse(template)
-            count++
-        }
-    }
-    println "Loaded ${count} templates in ${TimeCategory.minus(new Date(), start)}"
-    return templates
+AEMTemplate loadTemplateByName(String templateName, Map args = [:]) {
+    def templateFullPackage = "com.perficient.aemmigration.templates.${templateName}"
+    Class template = new ClassSearchUtil().findAllClassesUsingReflectionsLibrary(templateFullPackage)
+    assert template != null : "Template ${templateName} class not found at ${templateFullPackage}"
+    def templateInstance = template.newInstance(args)
+    assert templateInstance instanceof AEMTemplate: "Found template ${templateName}, but does not implement AEMTemplate.  Please adjust and re-run."
+    return (AEMTemplate)templateInstance
+
 }
 
 void processPages(File source, File jcrRoot, String batch = "") {
     
-    def templates = loadTemplates()
-    def replacements = loadReplacements()
+    Map replacements = loadReplacements()
     
     def pageFile = new File("work${File.separator}config${File.separator}page-mappings.csv")
     def count = 0
     def migrated = 0
     println 'Processing pages...'
     for (row in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
-        PageMappingsCSV pageMapping = new PageMappingsCSV(row)
+        PageMappingsCSV pageMapping = new PageMappingsCSVImpl(row)
 
         println "Processing page ${count + 1}"
 
         if( pageMapping.processPage(batch) ){
-            def template = templates[pageMapping.getTemplate()]
-            assert template : "Template ${pageMapping.getTemplate()} not found!"
 
             def sourceFile = new File(pageMapping.getSourcePath(),source)
             assert sourceFile.exists() : "Source file ${sourceFile} not found!"
 
             println "Using template ${pageMapping.getTemplate()} for ${sourceFile}"
 
-            def pageXml = new PageXML(new XmlSlurper().parseText(sourceFile.getText(ENCODING)))
+            PageXML pageXml = new PageXMLImpl(new XmlSlurper().parseText(sourceFile.getText(ENCODING)))
 
             def writer = new StringWriter()
-            def outXml = new MarkupBuilder(writer)
+            MarkupBuilder outXml = new MarkupBuilder(writer)
 
             println 'Rendering page...'
-            template.renderPage(pageMapping, pageXml, outXml, replacements)
+            AEMTemplate template = loadTemplateByName(pageMapping.getTemplate())
+            template.renderPage( pageMapping ,  pageXml, outXml, replacements)
 
             println 'Creating parent folder...'
             def targetFile = new File("${pageMapping.getNewPath()}${File.separator}.content.xml",jcrRoot)
@@ -150,7 +151,7 @@ void processPages(File source, File jcrRoot, String batch = "") {
 
         count++
     }
-    println "${count} pages processed and ${migrated} migrated in ${TimeCategory.minus(new Date(), start)}"
+    println "${count} pages processed and ${migrated} migrated."
 }
 
 void processAssets(File source, File jcrRoot){
@@ -191,10 +192,9 @@ void processAssets(File source, File jcrRoot){
     }
 }
 
-void generateFilter(batch) {
+void generateFilter(batch,File vlt,File workConfig) {
     println 'Updating filter.xml...'
-    def vlt = new File("META-INF${File.separator}vault", target)
-    vlt.mkdirs()
+
     if (batch?.trim()) {
         def writer = new StringWriter()
         def filterXml = new MarkupBuilder(writer)
@@ -203,7 +203,7 @@ void generateFilter(batch) {
 
         filterXml.'workspaceFilter'('version': '1.0') {
             for (pageData in parseCsv(pageFile.getText(ENCODING), separator: SEPARATOR)) {
-                PageMappingsCSV pageMapping = new PageMappingsCSV(pageData)
+                PageMappingsCSV pageMapping = new PageMappingsCSVImpl(pageData)
                 if (pageMapping.processPage(batch)) {
                     'filter'('root': pageMapping.getNewPath()) {
                         'include'('pattern': pageMapping.getNewPath())
@@ -222,54 +222,43 @@ void generateFilter(batch) {
         }
         new File('filter.xml', vlt) << writer.toString()
     } else {
-        def filter = new File('filter.xml', workConfig)
-        assert filter.exists()
+        File filter = new File('filter.xml', workConfig)
+        assert filter.exists() : "'filter.xml' not found in ${workConfig.toString()} folder.  Please ensure one exists."
+        def newLoc = new File ('filter.xml',vlt)
         Files.copy(filter.toPath(), new File('filter.xml', vlt).toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
     }
 }
 
-void generatePropertiesXml(File workFolder, String createTime) {
+void generatePropertiesXml(File workFolder, vlt, File configDir, String createTime) {
     println 'Updating properties.xml...'
     def propertiesXml = new File('properties.xml', workFolder)
     assert propertiesXml.exists()
     new File('properties.xml', vlt) << propertiesXml.getText().replace('${version}', createTime).replace('${name}', "migrated-content-${configDir.getName()}")
 }
 
+void main(baseFolder,batch) {
 
-
-void main(args) {
+    println("Getting started!")
     def start = new Date()
-    String createTime = start.format("yyyy-MM-dd-HH-mm-ss")
-
-    if(args.length < 1) {
-        println 'groovy migrate.groovy [configdir] [batch (Optional)]'
-        System.exit(1)
-    }
-
-    String batch = ""
-
-    if(args.length == 2) {
-        batch = args[1]
-        println "Using batch ${batch}"
-    }
 
     //initiate all files
-    def configDir = new File(args[0])
-    assert configDir.exists()
-    def base = new File('work')
-    def source = new File('source', base)
-    def target = new File('target', base)
-    def jcrRoot = new File('jcr_root', target)
-    def workConfig = new File("work${File.separator}config")
+    File baseInputFolder = new File(baseFolder)
+    assert baseInputFolder.exists() : "Invalid base folder provided"
+    File configDir = new File("config", baseInputFolder)
+    assert configDir.exists() : "Ensure a ${baseFolder}/config folder exists with appropriate config files"
+    File baseWorkingFolder = new File('work')
+    File source = new File('source', baseInputFolder)
+    assert source.exists() : "Ensure a ${baseFolder}/source folder exists with page XMLs"
+    File target = new File('target', baseWorkingFolder)
+    File workConfig = new File("work${File.separator}config")
     if(!workConfig.exists()){
         workConfig.mkdirs()
     }
 
-    println "Using source: ${source}"
+    println "Using configs from: ${configDir}"
+    println "Using sources from: ${source}"
     println "Using target: ${target}"
     println 'Copying configuration to work dir...'
-
-
 
     configDir.eachFile (FileType.FILES) { file ->
         Files.copy(file.toPath(), new File(workConfig.getAbsolutePath()+File.separator+file.getName()).toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.COPY_ATTRIBUTES)
@@ -279,17 +268,24 @@ void main(args) {
     target.deleteDir();
     target.mkdir();
 
+    //post cleanup re-structure
+    File jcrRoot = new File('jcr_root', target)
+    File vlt = new File("META-INF${File.separator}vault", target)
+    vlt.mkdirs()
+
+    String createTime = start.format("yyyy-MM-dd-HH-mm-ss")
+
     processPages(source, jcrRoot, batch)
     processAssets(source, jcrRoot)
-    generateFilter(batch)
-    generatePropertiesXml(workConfig,createTime)
+    generateFilter(batch,vlt,workConfig)
+    generatePropertiesXml(workConfig,vlt, configDir,createTime)
 
     println 'Creating package...'
     def ant = new AntBuilder()
-    ant.zip(destfile: "${base.getAbsolutePath()}${File.separator}migrated-content-${configDir.getName()}-${createTime}.zip", basedir: target)
+    ant.zip(destfile: "${baseInputFolder.getAbsolutePath()}${File.separator}migrated-content-${configDir.getName()}-${createTime}.zip", basedir: target)
     println "Package saved to: work${File.separator}migrated-content-${configDir.getName()}-${createTime}.zip"
     println "Content migrated in ${TimeCategory.minus(new Date(), start)}"
     println "Package created successfully!!!"
 }
 
-main(args)
+main(args[0],batch)

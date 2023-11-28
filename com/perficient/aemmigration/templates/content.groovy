@@ -1,14 +1,14 @@
-package templates
+package com.perficient.aemmigration.templates
 
-import classes.JCRNodeTemplates
-import classes.PageMappingsCSV
-import classes.PageXML
+import com.perficient.aemmigration.main.JCRNodeTemplates
+import com.perficient.aemmigration.main.PageMappingsCSV
+import com.perficient.aemmigration.main.PageXML
 import groovy.xml.MarkupBuilder
 
 
 void renderPage(PageMappingsCSV pageMappingsCSV, PageXML pageXml, MarkupBuilder outXml, Map replacements){
 
-    def pageTemplate = '/conf/sample/settings/wcm/templates/content-page'
+    def pageTemplate = '/conf/sample/settings/wcm/com.perficient.aemmigration.templates/content-page'
     def pageResourceType = 'sample/components/structure/page'
 
 

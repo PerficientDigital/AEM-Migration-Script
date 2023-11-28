@@ -1,7 +1,11 @@
-package classes
+package com.perficient.aemmigration.main.impl
+
+import com.perficient.aemmigration.main.PageMappingsCSV
+
+
 //Status,Batch,Template,Legacy Url,Source Path,New Path,New Url
 //add'l props accessed through rawCSV if updated
-class PageMappingsCSV {
+class PageMappingsCSVImpl implements PageMappingsCSV {
     String status
     String batch
     String template
@@ -10,9 +14,9 @@ class PageMappingsCSV {
     String newPath
     String newUrl
 
-    Map rawCSV = [:]
+    def rawCSV = [:]
 
-    PageMappingsCSV(Map pageCSV){
+    PageMappingsCSVImpl(Object pageCSV){
         this.rawCSV = pageCSV
         this.status = pageCSV['Status']
         this.batch = pageCSV['Batch']

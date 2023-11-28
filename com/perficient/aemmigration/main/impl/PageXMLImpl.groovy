@@ -1,14 +1,15 @@
-package classes
+package com.perficient.aemmigration.main.impl
 
+import com.perficient.aemmigration.main.PageXML
 import groovy.xml.slurpersupport.GPathResult
 
-class PageXML {
+class PageXMLImpl implements PageXML {
     String title
     String description
     String content
     GPathResult rawXML
 
-    PageXML(GPathResult inXml){
+    PageXMLImpl(GPathResult inXml){
        this.title = inXml.metadata.title.toString()
         if (this.title.isEmpty()) {
             this.title = inXml.title.toString()
